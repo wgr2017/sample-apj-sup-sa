@@ -47,6 +47,7 @@ export WANDB_DISABLED=true
 : "${SHARD_SIZE:=1024}"
 : "${EPISODE_SAMPLING_RATE:=0.1}"
 : "${NUM_SHARDS_PER_EPOCH:=100000}"
+: "${RETAIN_MODEL_WEIGHTS:=false}"
 
 export FI_PROVIDER="${FI_PROVIDER:-efa}"
 export FI_EFA_USE_DEVICE_RDMA="${FI_EFA_USE_DEVICE_RDMA:-1}"
@@ -218,6 +219,18 @@ mkdir -p "${OUTPUT_DIR}/rank-${NODE_RANK}/gpu-metrics"
 cp "${GPU_METRICS_CSV}" "${OUTPUT_DIR}/rank-${NODE_RANK}/gpu-metrics/nvidia-smi.csv" 2>/dev/null || true
 cp "${OUTPUT_DIR}/${RUN_NAME}/phase-timing-rank-${NODE_RANK}.json" \
   "${OUTPUT_DIR}/rank-${NODE_RANK}/phase-timing.json" 2>/dev/null || true
+if [[ "${RETAIN_MODEL_WEIGHTS}" != "true" ]]; then
+  find "${OUTPUT_DIR}" -type d -name "checkpoint-*" -prune -exec rm -rf {} +
+  find "${OUTPUT_DIR}" -type f \( \
+    -name "*.safetensors" -o \
+    -name "*.pt" -o \
+    -name "*.bin" -o \
+    -name "pytorch_model*" -o \
+    -name "optimizer.pt" -o \
+    -name "scheduler.pt" -o \
+    -name "rng_state.pth" \
+  \) -delete
+fi
 
 cat >"${OUTPUT_DIR}/run-manifest-rank-${NODE_RANK}.json" <<JSON
 {
@@ -247,6 +260,7 @@ cat >"${OUTPUT_DIR}/run-manifest-rank-${NODE_RANK}.json" <<JSON
   "num_shards_per_epoch": ${NUM_SHARDS_PER_EPOCH},
   "gpu_metrics_interval_seconds": ${GPU_METRICS_INTERVAL_SECONDS:-10},
   "runtime_seconds": $((END_TS - START_TS)),
+  "retain_model_weights": "${RETAIN_MODEL_WEIGHTS}",
   "train_exit": ${TRAIN_EXIT}
 }
 JSON

@@ -11,9 +11,9 @@ The reference defaults favor private networking, scoped identity, and encrypted 
 - S3, RDS, Redis, ECR, and Secrets Manager use KMS-backed encryption.
 - OSMO service pods use IRSA where the Helm charts support it.
 - Karpenter uses EKS Pod Identity for controller AWS permissions and creates GPU nodes only in private subnets selected by cluster discovery tags.
-- G7e nodes require IMDSv2, use encrypted gp3 root volumes, and do not receive public IP addresses from the private subnet configuration.
+- GPU nodes require IMDSv2, use encrypted gp3 root volumes, and do not receive public IP addresses from the private subnet configuration.
 - GPU nodes are tainted with `nvidia.com/gpu=true:NoSchedule`; GPU workloads that request `nvidia.com/gpu` receive the matching toleration through Kubernetes admission.
-- The AWS EFA device plugin also tolerates the G7e GPU taint so EFA-capable GPU nodes can register `vpc.amazonaws.com/efa` without weakening the workload taint boundary.
+- The AWS EFA device plugin also tolerates the GPU taint so EFA-capable GPU nodes can register `vpc.amazonaws.com/efa` without weakening the workload taint boundary.
 - The EKS node security group allows self-referenced all-traffic ingress and
   egress for EFA/NCCL and MPI workloads. This broadens node-to-node traffic only
   inside the node security group and is required for multi-node EFA validation.

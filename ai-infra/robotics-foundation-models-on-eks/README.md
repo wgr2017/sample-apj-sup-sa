@@ -10,9 +10,9 @@ This sample owns the AWS side of the stack: a secure EKS landing zone, GPU capac
 
 - Current standard-support Amazon EKS baseline on private subnets.
 - AWS-native backing services for OSMO: Amazon RDS PostgreSQL, Amazon ElastiCache for Redis, Amazon S3, Amazon ECR, AWS KMS, and IRSA.
-- Karpenter GPU NodePool for On-Demand G7e instances with private subnet placement, IMDSv2, encrypted gp3 root volumes, and a pinned EKS AL2023 NVIDIA AMI.
+- Karpenter GPU NodePools for On-Demand G7e and G6e instances with private subnet placement, IMDSv2, encrypted gp3 root volumes, and a pinned EKS AL2023 NVIDIA AMI.
 - NVIDIA GPU Operator installed from a pinned Helm chart with driver/toolkit installation disabled for the EKS NVIDIA AMI.
-- AWS EFA device plugin installed from a pinned Helm chart with the G7e GPU taint toleration required to expose `vpc.amazonaws.com/efa` on EFA-capable GPU nodes.
+- AWS EFA device plugin installed from a pinned Helm chart with the GPU taint toleration required to expose `vpc.amazonaws.com/efa` on EFA-capable GPU nodes.
 
 ### OSMO Deployment
 
@@ -24,7 +24,7 @@ This sample owns the AWS side of the stack: a secure EKS landing zone, GPU capac
 ### Validated Robotics Workflows
 
 - OSMO CPU and GPU smoke workflows.
-- NVIDIA GR00T fine-tuning workflows, including OSMO workflow submission and Kubernetes-native distributed training validation.
+- NVIDIA GR00T fine-tuning workflows, including OSMO workflow submission and distributed EFA training validation.
 - OpenPI LoRA fine-tuning examples.
 - Cosmos Reason2 NIM and Cosmos augmentation examples.
 - Isaac Lab and RSL-RL validation examples.
@@ -118,16 +118,19 @@ Use EFA-enabled mode when a workflow explicitly needs EFA or NCCL/RDMA validatio
 
 ```bash
 infra/kubernetes/deploy-efa-device-plugin.sh
-GPU_PREWARM_INSTANCE_TYPE=g7e.12xlarge infra/kubernetes/prewarm-gpu-node.sh
+GPU_PREWARM_INSTANCE_TYPE=g6e.8xlarge \
+  GPU_PREWARM_EFA=true \
+  infra/kubernetes/prewarm-gpu-node.sh
 OSMO_VALIDATE_EFA_DEVICE_PLUGIN=true \
   OSMO_VALIDATE_EFA_NODE=true \
   infra/kubernetes/validate-platform.sh
 ```
 
-For multi-node EFA validation, run the Kubernetes-native NCCL benchmark:
+For multi-node EFA validation, run the OSMO NCCL benchmark:
 
 ```bash
-KUBE_CONTEXT=<your-context> benchmarks/g7e-efa-nccl/run.sh
+cd benchmarks/g6e-efa-nccl
+osmo workflow submit workflow.yaml --pool default
 ```
 
 That NCCL benchmark is a transport check. Its in-place and out-of-place
@@ -136,15 +139,16 @@ same memory, so similar performance is expected. To compare training wall-clock
 with and without EFA, run the DDP benchmark:
 
 ```bash
-KUBE_CONTEXT=<your-context> benchmarks/g7e-efa-ddp/run.sh
+cd benchmarks/g6e-efa-ddp
+osmo workflow submit workflow.yaml --pool default
 ```
 
-The validated DDP run used two `g7e.12xlarge` nodes, one GPU per node, and a
-256 MiB gradient payload per rank. EFA used NCCL Libfabric/GDRDMA and completed
-12 measured steps in `0.129 s`; the non-EFA comparison forced `NCCL_NET=Socket`
-and completed the same steps in `1.371 s`.
+The DDP benchmark defaults to two `g6e.8xlarge` nodes, one GPU per node, and a
+64 MiB gradient payload per rank. The EFA path uses NCCL Libfabric through the
+`g6e-l40s-efa` OSMO platform; the non-EFA comparison sets `mode=socket` and
+uses the `g6e-l40s` platform to force `NCCL_NET=Socket`.
 
-G7e capacity can be scarce for repeatable multi-node EFA validation. If Spot is
+GPU capacity can be scarce for repeatable multi-node EFA validation. If Spot is
 acceptable for a smoke or benchmark run, allow both capacity types:
 
 ```bash
@@ -161,14 +165,14 @@ KARPENTER_CAPACITY_RESERVATION_IDS=cr-0123456789abcdef0 \
 
 `KARPENTER_CAPACITY_RESERVATION_IDS` accepts a comma-separated list when the run
 uses more than one targeted reservation. Without reserved capacity, Karpenter
-may create EFA-capable G7e NodeClaims and still fail at EC2 `CreateFleet` with
+may create EFA-capable GPU NodeClaims and still fail at EC2 `CreateFleet` with
 `InsufficientInstanceCapacity`.
 
 The core Terraform module opens self-referenced all-traffic ingress and egress
 on the EKS node security group because EFA/NCCL traffic requires node-to-node
 communication beyond ordinary Kubernetes pod TCP ports.
 
-Use EFA-disabled mode for ordinary single-node GPU examples or smaller G7e sizes. In that mode, skip `infra/kubernetes/deploy-efa-device-plugin.sh`, do not request `vpc.amazonaws.com/efa` in workflow pod resources, and leave `OSMO_VALIDATE_EFA_NODE=false`.
+Use EFA-disabled mode for ordinary single-node GPU examples or GPU-only platforms. In that mode, skip `infra/kubernetes/deploy-efa-device-plugin.sh`, do not request `vpc.amazonaws.com/efa` in workflow pod resources, and leave `OSMO_VALIDATE_EFA_NODE=false`.
 
 Destroy the reference environment when finished:
 

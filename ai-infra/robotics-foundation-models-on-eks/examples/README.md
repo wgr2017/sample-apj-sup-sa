@@ -15,10 +15,12 @@ Top-level directories are categories:
 | [workflow-patterns](workflow-patterns/) | Small workflows that demonstrate OSMO DAG patterns. |
 | [world-models](world-models/) | World model inference and reconstruction examples. |
 
-Single-workflow OSMO examples use `workflow.yaml`. Multistage OSMO examples
-keep ordered workflow YAMLs under `workflows/`. Kubernetes-native examples keep
-their pod/service manifests under `templates/` and use `run.sh` only for
-parameter handling, submission, waiting, and artifact collection.
+Single-workflow OSMO examples use `workflow.yaml`. Long bootstrap or workload
+logic should live in a local script such as `entry.sh` and be mounted by the
+workflow, rather than embedded inline in YAML. Multistage OSMO examples keep
+ordered workflow YAMLs under `workflows/`. Keep `run.sh` only where an existing
+example needs a compatibility wrapper for parameter handling, multi-step
+submission, waiting, cleanup, or artifact collection.
 
 Example-specific run notes stay next to the example. Selected examples keep a
 small `artifacts/` directory with representative output; detailed sample run
@@ -43,7 +45,7 @@ results are summarized in the contribution pull request.
 | Example | Purpose | Output |
 | --- | --- | --- |
 | [gr00t-so100-finetune](policy-training/gr00t-so100-finetune/README.md) | PASK-aligned GR00T fine-tune on the SO100 cube_to_bowl_5 dataset. | [Before/after replay preview](policy-training/gr00t-so100-finetune/artifacts/result/traj_0_step_1_vs_10k.jpeg). |
-| [gr00t-so100-efa-multinode-finetune](policy-training/gr00t-so100-efa-multinode-finetune/README.md) | GR00T SO100 fine-tune scaled across two G6e EFA nodes. | Runtime logs and copied rank outputs. |
+| [gr00t-so100-efa-multinode-finetune](policy-training/gr00t-so100-efa-multinode-finetune/README.md) | OSMO GR00T SO100 fine-tune scaled across two G6e EFA nodes. | Rank-0 runtime logs and output dataset artifacts. |
 | [openpi-libero-lora](policy-training/openpi-libero-lora/README.md) | PASK-aligned OpenPI LIBERO LoRA workflow. | [Action replay GIF](policy-training/openpi-libero-lora/artifacts/result/openpi-action-output-replay.gif). |
 
 ## Simulation And Task Pipelines
@@ -67,6 +69,6 @@ Submit single-workflow examples directly with
 credentials, submission, logs, and timeout handling. For multistage examples,
 follow the example README or submit the numbered workflow files in order.
 
-GPU workflows need visible G7e capacity before OSMO resource validation. Use
-`infra/kubernetes/prewarm-gpu-node.sh` before submission and
+GPU workflows need visible G7e or G6e capacity before OSMO resource validation.
+Use `infra/kubernetes/prewarm-gpu-node.sh` before submission and
 `infra/kubernetes/wait-gpu-node-cleanup.sh` after completion.

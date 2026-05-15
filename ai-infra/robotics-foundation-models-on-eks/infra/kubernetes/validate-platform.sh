@@ -26,6 +26,9 @@ if [[ "${OSMO_VALIDATE_KARPENTER}" == "true" ]]; then
   KARPENTER_RELEASE_NAME="${KARPENTER_RELEASE_NAME:-$(version_value karpenter_release_name)}"
   KARPENTER_NODEPOOL_NAME="${KARPENTER_NODEPOOL_NAME:-$(version_value karpenter_nodepool_name)}"
   KARPENTER_EC2NODECLASS_NAME="${KARPENTER_EC2NODECLASS_NAME:-$(version_value karpenter_ec2nodeclass_name)}"
+  KARPENTER_G6E_NODEPOOL_NAME="${KARPENTER_G6E_NODEPOOL_NAME:-$(version_value karpenter_g6e_nodepool_name)}"
+  KARPENTER_G6E_EC2NODECLASS_NAME="${KARPENTER_G6E_EC2NODECLASS_NAME:-$(version_value karpenter_g6e_ec2nodeclass_name)}"
+  KARPENTER_DEPLOY_G6E_NODEPOOL="${KARPENTER_DEPLOY_G6E_NODEPOOL:-true}"
 
   helm status "${KARPENTER_RELEASE_NAME}" --namespace "${KARPENTER_NAMESPACE}" >/dev/null
   kubectl -n "${KARPENTER_NAMESPACE}" rollout status "deployment/${KARPENTER_RELEASE_NAME}" --timeout=10m >/dev/null
@@ -34,6 +37,10 @@ if [[ "${OSMO_VALIDATE_KARPENTER}" == "true" ]]; then
   kubectl get crd ec2nodeclasses.karpenter.k8s.aws >/dev/null
   kubectl wait --for=condition=Ready "nodepool/${KARPENTER_NODEPOOL_NAME}" --timeout=5m >/dev/null
   kubectl wait --for=condition=Ready "ec2nodeclass/${KARPENTER_EC2NODECLASS_NAME}" --timeout=5m >/dev/null
+  if [[ "${KARPENTER_DEPLOY_G6E_NODEPOOL}" == "true" ]]; then
+    kubectl wait --for=condition=Ready "nodepool/${KARPENTER_G6E_NODEPOOL_NAME}" --timeout=5m >/dev/null
+    kubectl wait --for=condition=Ready "ec2nodeclass/${KARPENTER_G6E_EC2NODECLASS_NAME}" --timeout=5m >/dev/null
+  fi
 fi
 
 if [[ "${OSMO_VALIDATE_GPU_OPERATOR}" == "true" ]]; then
@@ -48,12 +55,17 @@ fi
 if [[ "${OSMO_VALIDATE_EFA_DEVICE_PLUGIN}" == "true" ]]; then
   EFA_DEVICE_PLUGIN_NAMESPACE="${EFA_DEVICE_PLUGIN_NAMESPACE:-$(version_value efa_device_plugin_namespace)}"
   EFA_DEVICE_PLUGIN_RELEASE_NAME="${EFA_DEVICE_PLUGIN_RELEASE_NAME:-$(version_value efa_device_plugin_release_name)}"
+  EFA_DEVICE_PLUGIN_IMAGE_TAG="${EFA_DEVICE_PLUGIN_IMAGE_TAG:-$(version_value efa_device_plugin_image_tag)}"
 
   helm status "${EFA_DEVICE_PLUGIN_RELEASE_NAME}" --namespace "${EFA_DEVICE_PLUGIN_NAMESPACE}" >/dev/null
   kubectl -n "${EFA_DEVICE_PLUGIN_NAMESPACE}" get daemonset "${EFA_DEVICE_PLUGIN_RELEASE_NAME}" >/dev/null
   kubectl -n "${EFA_DEVICE_PLUGIN_NAMESPACE}" get daemonset "${EFA_DEVICE_PLUGIN_RELEASE_NAME}" -o json |
     jq -e 'any(.spec.template.spec.tolerations[]?; .key == "nvidia.com/gpu" and .operator == "Exists" and .effect == "NoSchedule")' >/dev/null ||
-    die "EFA device plugin does not tolerate the G7e GPU taint"
+    die "EFA device plugin does not tolerate the GPU taint"
+  RUNNING_IMAGE_TAG="$(kubectl -n "${EFA_DEVICE_PLUGIN_NAMESPACE}" get daemonset "${EFA_DEVICE_PLUGIN_RELEASE_NAME}" -o json |
+    jq -r '.spec.template.spec.containers[] | select(.name == "aws-efa-k8s-device-plugin") | .image | split(":")[-1]')"
+  [[ "${RUNNING_IMAGE_TAG}" == "${EFA_DEVICE_PLUGIN_IMAGE_TAG}" ]] ||
+    die "EFA device plugin image tag is ${RUNNING_IMAGE_TAG}, expected ${EFA_DEVICE_PLUGIN_IMAGE_TAG}"
 fi
 
 if [[ "${OSMO_VALIDATE_KAI}" == "true" ]]; then

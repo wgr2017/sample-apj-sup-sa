@@ -43,10 +43,10 @@ The clean-account test must verify:
 - Terraform fmt and validate succeed.
 - NGC API key input is available before OSMO Helm install.
 - KAI Scheduler installs from the pinned OCI Helm chart and exposes the real `scheduling.run.ai` PodGroup CRD.
-- Karpenter installs from the pinned OCI Helm chart and exposes the G7e NodePool and EC2NodeClass.
-- The default VPC creates Karpenter-discoverable GPU subnets across the configured region's selected Availability Zones so Karpenter can try multiple zones for large On-Demand G7e capacity.
+- Karpenter installs from the pinned OCI Helm chart and exposes the G7e and G6e NodePools and EC2NodeClasses.
+- The default VPC creates Karpenter-discoverable GPU subnets across the configured region's selected Availability Zones so Karpenter can try multiple zones for On-Demand GPU capacity.
 - NVIDIA GPU Operator installs from the pinned Helm chart with driver and toolkit management disabled for the EKS AL2023 NVIDIA AMI.
-- AWS EFA device plugin installs from the pinned Helm chart and tolerates the G7e GPU taint so EFA-capable G7e nodes can register `vpc.amazonaws.com/efa`.
+- AWS EFA device plugin installs from the pinned Helm chart and tolerates the GPU taint so EFA-capable GPU nodes can register `vpc.amazonaws.com/efa`.
 - The default system node group leaves workflow-allocatable CPU after OSMO and KAI system pods are reserved.
 - OSMO installs on a cluster without Prometheus Operator.
 - Backend operator token generation uses `backend-operator`.
@@ -63,13 +63,16 @@ EFA-disabled validation is the default for ordinary CPU and single-node GPU smok
 EFA-enabled validation requires two conditions:
 
 - Install the AWS EFA device plugin with `infra/kubernetes/deploy-efa-device-plugin.sh`.
-- Prewarm or submit onto an EFA-capable G7e size such as `g7e.8xlarge`, `g7e.12xlarge`, or `g7e.24xlarge`.
+- Prewarm or submit onto an EFA-capable GPU size such as `g6e.8xlarge`, `g7e.8xlarge`, `g7e.12xlarge`, or `g7e.24xlarge`.
 - Keep the core Terraform node security group self ingress and egress rules
   enabled so EFA/NCCL traffic can pass between nodes.
 
 After an EFA-capable node is present, run:
 
 ```bash
+GPU_PREWARM_INSTANCE_TYPE=g6e.8xlarge \
+  GPU_PREWARM_EFA=true \
+  infra/kubernetes/prewarm-gpu-node.sh
 OSMO_VALIDATE_EFA_DEVICE_PLUGIN=true \
   OSMO_VALIDATE_EFA_NODE=true \
   infra/kubernetes/validate-platform.sh
@@ -85,7 +88,7 @@ KARPENTER_CAPACITY_TYPES=on-demand,spot infra/kubernetes/deploy-karpenter.sh
 ```
 
 For stricter repeatable multi-node EFA validation, use targeted EC2 Capacity
-Reservation or Capacity Block capacity for the EFA-capable G7e sizes and pass
+Reservation or Capacity Block capacity for the EFA-capable GPU sizes and pass
 the reservation ID when deploying Karpenter:
 
 ```bash
@@ -96,18 +99,18 @@ KARPENTER_CAPACITY_RESERVATION_IDS=cr-0123456789abcdef0 \
 `KARPENTER_CAPACITY_RESERVATION_IDS` accepts a comma-separated list when the run
 uses more than one targeted reservation. Without reserved capacity, Karpenter
 can still reach EC2 `CreateFleet` and fail with `InsufficientInstanceCapacity`
-if the region has no available G7e capacity for the requested size and
+if the region has no available GPU capacity for the requested size and
 Availability Zone.
 
-For multi-node collective validation, run
-`benchmarks/g7e-efa-nccl/run.sh`. That benchmark requests EFA and one
-GPU on two separate G7e nodes and records NCCL Libfabric/GDRDMA
-evidence in its validation log.
+For multi-node collective validation, submit
+`benchmarks/g6e-efa-nccl/workflow.yaml` through OSMO. That benchmark requests
+EFA and one GPU on two separate G6e nodes and records NCCL Libfabric evidence in
+its validation log and output dataset.
 
-For training wall-clock comparison, run
-`benchmarks/g7e-efa-ddp/run.sh`. That benchmark runs the same synthetic
-PyTorch DDP training step twice: once with EFA requested and NCCL using
-Libfabric/GDRDMA, and once with `NCCL_NET=Socket` forced for the non-EFA
+For training wall-clock comparison, submit
+`benchmarks/g6e-efa-ddp/workflow.yaml` through OSMO. That benchmark runs the same
+synthetic PyTorch DDP training step twice: once with EFA requested and NCCL using
+Libfabric, and once with `NCCL_NET=Socket` forced for the non-EFA
 comparison path.
 
 AWS KMS keys are scheduled for deletion rather than removed immediately. The repo sets a seven-day deletion window for the reference and EKS keys.

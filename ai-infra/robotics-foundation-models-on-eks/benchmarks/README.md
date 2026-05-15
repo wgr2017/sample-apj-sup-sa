@@ -6,5 +6,5 @@ because they are measurement workloads rather than beginner workflow examples.
 
 | Benchmark | Purpose | Output |
 | --- | --- | --- |
-| [g7e-efa-nccl](g7e-efa-nccl/README.md) | 2-node G7e EFA NCCL all-reduce benchmark. | [Bandwidth plot](g7e-efa-nccl/artifacts/nccl-efa-2node-bandwidth.svg). |
-| [g7e-efa-ddp](g7e-efa-ddp/README.md) | 2-node G7e PyTorch DDP training benchmark comparing EFA against NCCL socket networking. | [Training-time plot](g7e-efa-ddp/artifacts/training-time.svg). |
+| [g6e-efa-nccl](g6e-efa-nccl/README.md) | 2-node G6e EFA NCCL all-reduce benchmark. | [Bandwidth plot](g6e-efa-nccl/artifacts/nccl-efa-2node-bandwidth.svg). |
+| [g6e-efa-ddp](g6e-efa-ddp/README.md) | 2-node G6e PyTorch DDP training benchmark comparing EFA against NCCL socket networking. | [Training-time plot](g6e-efa-ddp/artifacts/training-time.svg). |

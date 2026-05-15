@@ -1,14 +1,14 @@
 # GR00T SO100 EFA Multi-Node Fine-Tune
 
-Kubernetes-native GR00T fine-tune smoke for validating distributed EFA-capable
-GPU training with a real robotics training stack.
+OSMO GR00T fine-tune smoke for validating distributed EFA-capable GPU training
+with a real robotics training stack.
 
-Status: exercised with real two-node GR00T training over NCCL Libfabric/EFA on
+Status: validated with real two-node GR00T training over NCCL Libfabric/EFA on
 G6e with the AWS DLC image that matches the pinned Isaac-GR00T runtime.
 
 This distributed example uses the same pinned Isaac-GR00T source ref and
-SO100 `cube_to_bowl_5` demo data as the OSMO fine-tune workflow, but runs the
-training command through `torchrun` across two EFA-capable GPU pods.
+SO100 `cube_to_bowl_5` demo data as the single-node fine-tune workflow, but
+runs the training command through `torchrun` across two EFA-capable OSMO tasks.
 
 The default image is intentionally not the repo-wide PyTorch 2.9/cu130 DLC.
 Isaac-GR00T N1.6 pins `torch==2.7.1`, CUDA 12.8 wheels, NCCL 2.26, and
@@ -17,8 +17,8 @@ Isaac-GR00T N1.6 pins `torch==2.7.1`, CUDA 12.8 wheels, NCCL 2.26, and
 so the in-container GR00T lockfile and the AWS OFI/NCCL stack stay aligned.
 The AWS Physical AI Scaffolding Kit GR00T sample follows the same upstream
 GR00T `uv`/`flash-attn` dependency path, but its Slurm script is single-node
-(`SBATCH --nodes=1`), so this example keeps the Kubernetes two-node launch
-logic locally.
+(`SBATCH --nodes=1`), so this example keeps the two-node launch logic in the
+OSMO workflow.
 
 Prerequisites:
 
@@ -28,34 +28,33 @@ Prerequisites:
   device plugin.
 - `infra/core` has applied node security group self ingress and egress rules
   required by EFA.
-- At least two EFA-capable GPU nodes can be provisioned. The default selector
-  targets `aws.osmo.reference/nodepool=g6e`; override `NODE_SELECTOR_VALUE`
-  for another EFA-capable GPU NodePool.
+- `infra/kubernetes/deploy-osmo.sh` has configured the `g6e-l40s-efa` OSMO
+  platform.
+- At least two EFA-capable G6e nodes can be provisioned.
 - If On-Demand GPU capacity is scarce and Spot is acceptable, redeploy
   Karpenter with
   `KARPENTER_CAPACITY_TYPES=on-demand,spot infra/kubernetes/deploy-karpenter.sh`.
 - For repeatable validation, use a targeted EC2 Capacity Reservation or Capacity
   Block and redeploy Karpenter with
   `KARPENTER_CAPACITY_RESERVATION_IDS=cr-... infra/kubernetes/deploy-karpenter.sh`.
-- `HF_TOKEN` is set, or `HF_TOKEN_FILE` points to a Hugging Face token file.
+- The OSMO credential `huggingface_token` contains a Hugging Face token under
+  the `token` key.
 
 Run the bounded smoke:
 
 ```bash
-KUBE_CONTEXT=example-osmo-context \
-  HF_TOKEN_FILE="$HOME/.huggingface/token" \
-  examples/policy-training/gr00t-so100-efa-multinode-finetune/run.sh
+cd examples/policy-training/gr00t-so100-efa-multinode-finetune
+osmo workflow submit workflow.yaml --pool default
 ```
 
-`run.sh` renders the Kubernetes Service and rank pods from
-[templates/](templates/). The in-container training entrypoint remains in
-[entry.sh](entry.sh), and the local Isaac-GR00T compatibility patches are kept
-under [patches/](patches/).
+The workflow injects [entry.sh](entry.sh) and the local Isaac-GR00T
+compatibility patches under [patches/](patches/). OSMO provides the master host
+with `{{host:master}}`, schedules both ranks through the `g6e-l40s-efa`
+platform, and uploads rank-0 artifacts to the configured output dataset.
 
 Default workload:
 
-- 2 nodes, selected by `NODE_SELECTOR_KEY=aws.osmo.reference/nodepool` and
-  `NODE_SELECTOR_VALUE=g6e`
+- 2 G6e EFA nodes selected by the `g6e-l40s-efa` OSMO platform
 - 1 GPU per node
 - `torchrun --nnodes=2 --nproc_per_node=1`
 - `nvidia/GR00T-N1.6-3B`
@@ -65,15 +64,20 @@ Default workload:
 - Per pod request: `cpu=8`, `memory=64Gi`, `gpu=1`,
   `vpc.amazonaws.com/efa=1`
 
-The default requires distinct Kubernetes nodes with required pod anti-affinity
-and requests `vpc.amazonaws.com/efa=1` on each pod. For a Socket baseline, keep
-`REQUIRE_DISTINCT_NODES=true` and set `NCCL_NET=Socket`. For single-node
-multi-GPU training on one large node, set `REQUIRE_DISTINCT_NODES=false` and
-`NCCL_NET=Socket`.
+The OSMO platform requires distinct Kubernetes nodes with pod anti-affinity and
+requests `vpc.amazonaws.com/efa=1` for each task. The workflow defaults to
+`retain_model_weights=false` so artifact uploads keep logs, manifests, and
+timing data without uploading the large checkpoint weights.
 
-For a single-GPU baseline comparison, run with `WORLD_SIZE=1`. When the
-baseline only needs logs and runtime metrics, set `COPY_CHECKPOINT=false` to
-avoid copying the large checkpoint tree back to the local validation directory.
+Validated OSMO smoke on 2026-05-15:
+
+- Workflow `aws-gr00t-efa-multinode-osmo-smoke-cleanup-1` completed on two
+  `g6e.8xlarge` nodes.
+- Output dataset `gr00t-efa-multinode-osmo-smoke-cleanup-artifacts:1` uploaded
+  `621.0 KiB` with `retain_model_weights=false`.
+- Master and worker logs both showed `Selected provider is efa`,
+  `Using network Libfabric`, and `GR00T_EFA_MULTINODE_OK`.
+- The bounded smoke logged `train_runtime=197.942` seconds for `max_steps=1`.
 
 Measured aligned-image profile comparison:
 
@@ -91,9 +95,8 @@ single-GPU baseline and was about `1.13x` faster than the two-node Socket
 baseline. G6e reported `nccl_gdrdma=false`, so this validates the EFA
 Libfabric path on the documented GR00T runtime.
 
-The runner holds both pods after training, then can copy logs, rank metrics, run
-manifests, and the saved checkpoint directory into a local output directory.
-This sample copy does not commit raw per-rank JSON, logs, or checkpoints.
+OSMO uploads the rank-0 output dataset after training. This sample does not
+commit raw per-rank JSON, logs, or checkpoints.
 
 The pinned Isaac-GR00T ref defaults to `torchcodec`, and its lockfile uses the
 officially compatible `torch==2.7.1` and `torchcodec==0.4.0` pairing. The AWS
@@ -112,13 +115,9 @@ the missing backend branch. Set `GR00T_VIDEO_BACKEND=torchcodec`,
 Useful overrides:
 
 ```bash
-MAX_STEPS=100 \
-GLOBAL_BATCH_SIZE=2 \
-SAVE_STEPS=100 \
-TIMEOUT=180m \
-KUBE_CONTEXT=example-osmo-context \
-HF_TOKEN_FILE="$HOME/.huggingface/token" \
-  examples/policy-training/gr00t-so100-efa-multinode-finetune/run.sh
+osmo workflow submit workflow.yaml --pool default \
+  --set max_steps=100 save_steps=100 global_batch_size=2 \
+  --set-string output_dataset=gr00t-efa-multinode-100-step-artifacts
 ```
 
 Sample run results are summarized in the contribution pull request.

@@ -10,14 +10,33 @@ require_cmds kubectl jq terraform
 GPU_PREWARM_NAME="${GPU_PREWARM_NAME:-aws-osmo-gpu-prewarm}"
 GPU_PREWARM_INSTANCE_TYPE="${GPU_PREWARM_INSTANCE_TYPE:-g7e.2xlarge}"
 GPU_PREWARM_TIMEOUT="${GPU_PREWARM_TIMEOUT:-45m}"
-KARPENTER_NODEPOOL_NAME="${KARPENTER_NODEPOOL_NAME:-$(version_value karpenter_nodepool_name)}"
+GPU_PREWARM_EFA="${GPU_PREWARM_EFA:-false}"
+GPU_PREWARM_EFA_RESOURCE_NAME="${GPU_PREWARM_EFA_RESOURCE_NAME:-vpc.amazonaws.com/efa}"
+
+if [[ -z "${KARPENTER_NODEPOOL_NAME:-}" ]]; then
+  case "${GPU_PREWARM_INSTANCE_TYPE}" in
+    g6e.*) KARPENTER_NODEPOOL_NAME="$(version_value karpenter_g6e_nodepool_name)" ;;
+    *) KARPENTER_NODEPOOL_NAME="$(version_value karpenter_nodepool_name)" ;;
+  esac
+fi
 
 configure_kubectl
 OSMO_WORKLOAD_NAMESPACE="$(terraform_output osmo_workload_namespace)"
 
 kubectl create namespace "${OSMO_WORKLOAD_NAMESPACE}" --dry-run=client -o yaml | kubectl apply -f -
 
-log "prewarming ${GPU_PREWARM_INSTANCE_TYPE} for OSMO GPU resource validation"
+EFA_TOLERATION_YAML=""
+EFA_REQUEST_YAML=""
+EFA_LIMIT_YAML=""
+if [[ "${GPU_PREWARM_EFA}" == "true" ]]; then
+  EFA_TOLERATION_YAML="    - key: ${GPU_PREWARM_EFA_RESOURCE_NAME}
+      operator: Exists
+      effect: NoSchedule"
+  EFA_REQUEST_YAML="          ${GPU_PREWARM_EFA_RESOURCE_NAME}: 1"
+  EFA_LIMIT_YAML="          ${GPU_PREWARM_EFA_RESOURCE_NAME}: 1"
+fi
+
+log "prewarming ${GPU_PREWARM_INSTANCE_TYPE} in ${KARPENTER_NODEPOOL_NAME} for OSMO GPU resource validation"
 kubectl -n "${OSMO_WORKLOAD_NAMESPACE}" apply -f - <<YAML
 apiVersion: v1
 kind: Pod
@@ -36,6 +55,7 @@ spec:
     - key: nvidia.com/gpu
       operator: Exists
       effect: NoSchedule
+${EFA_TOLERATION_YAML}
   containers:
     - name: hold
       image: public.ecr.aws/docker/library/busybox:1.36
@@ -46,8 +66,10 @@ spec:
           cpu: 10m
           memory: 32Mi
           ephemeral-storage: 1Gi
+${EFA_REQUEST_YAML}
         limits:
           memory: 64Mi
+${EFA_LIMIT_YAML}
 YAML
 
 if ! kubectl -n "${OSMO_WORKLOAD_NAMESPACE}" wait \
@@ -75,4 +97,11 @@ done
 
 [[ "${GPU_ALLOCATABLE:-0}" -ge 1 ]] || die "prewarm node does not expose nvidia.com/gpu"
 
-log "prewarm node ready: ${PREWARM_NODE} (${INSTANCE_TYPE}, ${GPU_ALLOCATABLE} GPUs)"
+if [[ "${GPU_PREWARM_EFA}" == "true" ]]; then
+  EFA_ALLOCATABLE="$(kubectl get node "${PREWARM_NODE}" -o json |
+    jq -r --arg resource "${GPU_PREWARM_EFA_RESOURCE_NAME}" '.status.allocatable[$resource] // "0"')"
+  [[ "${EFA_ALLOCATABLE:-0}" -ge 1 ]] || die "prewarm node does not expose ${GPU_PREWARM_EFA_RESOURCE_NAME}"
+  log "prewarm node ready: ${PREWARM_NODE} (${INSTANCE_TYPE}, ${GPU_ALLOCATABLE} GPUs, ${EFA_ALLOCATABLE} EFA)"
+else
+  log "prewarm node ready: ${PREWARM_NODE} (${INSTANCE_TYPE}, ${GPU_ALLOCATABLE} GPUs)"
+fi

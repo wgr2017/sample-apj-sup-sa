@@ -21,6 +21,7 @@
 | EKS AL2023 NVIDIA AMI | `amazon-eks-node-al2023-x86_64-nvidia-1.35-v20260423` |
 | G7e GPU pool | `g7e.2xlarge`, `g7e.4xlarge`, `g7e.8xlarge`, `g7e.12xlarge`, `g7e.24xlarge`, `g7e.48xlarge` |
 | EFA-capable G7e sizes | `g7e.8xlarge`, `g7e.12xlarge`, `g7e.24xlarge`, `g7e.48xlarge` |
+| G6e GPU/EFA pool | `g6e.8xlarge` |
 | OSMO cookbook ref | `c2c30e55f84969fff55d51cd2044a03d40d6a1a5` |
 | GR00T repository ref | `NVIDIA/Isaac-GR00T@ead52833afbbf4243f8cd5e7664f48a94de03b19` |
 | GR00T runtime image | `nvcr.io/nvidia/pytorch:25.03-py3` |

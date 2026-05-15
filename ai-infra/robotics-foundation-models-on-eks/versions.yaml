@@ -36,6 +36,7 @@ gpu_operator:
 efa_device_plugin:
   efa_device_plugin_chart_repository: "https://aws.github.io/eks-charts"
   efa_device_plugin_chart_version: "v0.5.26"
+  efa_device_plugin_image_tag: "v0.5.18"
   efa_device_plugin_namespace: "kube-system"
   efa_device_plugin_release_name: "aws-efa-k8s-device-plugin"
 

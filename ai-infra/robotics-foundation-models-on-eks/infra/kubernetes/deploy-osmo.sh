@@ -18,8 +18,20 @@ OSMO_GPU_PLATFORM_NAME="${OSMO_GPU_PLATFORM_NAME:-g7e-rtx-pro-6000}"
 OSMO_GPU_POD_TEMPLATE_NAME="${OSMO_GPU_POD_TEMPLATE_NAME:-aws-g7e-rtx-pro-6000}"
 OSMO_GPU_PLATFORM_LABEL_KEY="${OSMO_GPU_PLATFORM_LABEL_KEY:-karpenter.sh/nodepool}"
 OSMO_GPU_PLATFORM_LABEL_VALUE="${OSMO_GPU_PLATFORM_LABEL_VALUE:-$(version_value karpenter_nodepool_name)}"
+OSMO_G6E_GPU_PLATFORM_NAME="${OSMO_G6E_GPU_PLATFORM_NAME:-g6e-l40s}"
+OSMO_G6E_GPU_POD_TEMPLATE_NAME="${OSMO_G6E_GPU_POD_TEMPLATE_NAME:-aws-g6e-l40s}"
+OSMO_G6E_GPU_PLATFORM_LABEL_VALUE="${OSMO_G6E_GPU_PLATFORM_LABEL_VALUE:-$(version_value karpenter_g6e_nodepool_name)}"
 OSMO_GPU_POD_DO_NOT_DISRUPT="${OSMO_GPU_POD_DO_NOT_DISRUPT:-true}"
 OSMO_GPU_POD_SHM_SIZE="${OSMO_GPU_POD_SHM_SIZE:-32Gi}"
+OSMO_CONFIGURE_EFA_PLATFORMS="${OSMO_CONFIGURE_EFA_PLATFORMS:-true}"
+OSMO_EFA_RESOURCE_NAME="${OSMO_EFA_RESOURCE_NAME:-vpc.amazonaws.com/efa}"
+OSMO_EFA_RESOURCE_COUNT="${OSMO_EFA_RESOURCE_COUNT:-1}"
+OSMO_G7E_EFA_PLATFORM_NAME="${OSMO_G7E_EFA_PLATFORM_NAME:-g7e-rtx-pro-6000-efa}"
+OSMO_G7E_EFA_POD_TEMPLATE_NAME="${OSMO_G7E_EFA_POD_TEMPLATE_NAME:-aws-g7e-rtx-pro-6000-efa}"
+OSMO_G7E_EFA_PLATFORM_LABEL_VALUE="${OSMO_G7E_EFA_PLATFORM_LABEL_VALUE:-$(version_value karpenter_nodepool_name)}"
+OSMO_G6E_EFA_PLATFORM_NAME="${OSMO_G6E_EFA_PLATFORM_NAME:-g6e-l40s-efa}"
+OSMO_G6E_EFA_POD_TEMPLATE_NAME="${OSMO_G6E_EFA_POD_TEMPLATE_NAME:-aws-g6e-l40s-efa}"
+OSMO_G6E_EFA_PLATFORM_LABEL_VALUE="${OSMO_G6E_EFA_PLATFORM_LABEL_VALUE:-$(version_value karpenter_g6e_nodepool_name)}"
 OSMO_INSTALL_KAI="${OSMO_INSTALL_KAI:-true}"
 if [[ "${OSMO_INSTALL_KAI}" == "true" ]]; then
   OSMO_K8S_SCHEDULER_NAME="${OSMO_K8S_SCHEDULER_NAME:-$(version_value kai_scheduler_name)}"
@@ -784,6 +796,217 @@ if [[ "${OSMO_CONFIGURE_GPU_PLATFORM}" == "true" ]]; then
       cat /tmp/osmo-pool-config.log >&2
       die "failed to configure OSMO pool GPU platform"
     fi
+  fi
+fi
+
+if [[ "${OSMO_CONFIGURE_GPU_PLATFORM}" == "true" ]]; then
+  POD_TEMPLATE_CURRENT="$(osmo config show POD_TEMPLATE 2>/dev/null || printf '{}')"
+  printf '%s' "${POD_TEMPLATE_CURRENT}" | jq \
+    --arg name "${OSMO_G6E_GPU_POD_TEMPLATE_NAME}" \
+    --arg label_key "${OSMO_GPU_PLATFORM_LABEL_KEY}" \
+    --arg label_value "${OSMO_G6E_GPU_PLATFORM_LABEL_VALUE}" \
+    --arg do_not_disrupt "${OSMO_GPU_POD_DO_NOT_DISRUPT}" \
+    --arg shm_size "${OSMO_GPU_POD_SHM_SIZE}" \
+    '.[$name] = {
+       metadata: {
+         annotations: {
+           "karpenter.sh/do-not-disrupt": $do_not_disrupt
+         }
+       },
+       spec: {
+         nodeSelector: {
+           ($label_key): $label_value
+         },
+         tolerations: [
+           {
+             key: "nvidia.com/gpu",
+             operator: "Exists",
+             effect: "NoSchedule"
+           }
+         ],
+         containers: [
+           {
+             name: "{{USER_CONTAINER_NAME}}",
+             volumeMounts: [
+               {
+                 name: "shm",
+                 mountPath: "/dev/shm"
+               }
+             ]
+           }
+         ],
+         volumes: [
+           {
+             name: "shm",
+             emptyDir: {
+               medium: "Memory",
+               sizeLimit: $shm_size
+             }
+           }
+         ]
+       }
+     }' >"${GPU_POD_TEMPLATE_CONFIG}"
+
+  if ! osmo_config_update /tmp/osmo-g6e-gpu-pod-template.log POD_TEMPLATE \
+    --file "${GPU_POD_TEMPLATE_CONFIG}" \
+    --description "Configure AWS G6e GPU pod template"; then
+    cat /tmp/osmo-g6e-gpu-pod-template.log >&2
+    die "failed to configure OSMO G6e pod template"
+  fi
+
+  if ! POOL_CURRENT="$(osmo config show POOL default 2>/tmp/osmo-pool-show.log)"; then
+    cat /tmp/osmo-pool-show.log >&2
+    log "OSMO pool config is unreadable; applying AWS reference pool baseline"
+    POOL_CURRENT="$(aws_reference_pool_baseline)"
+  fi
+
+  printf '%s' "${POOL_CURRENT}" | jq \
+    --arg platform "${OSMO_G6E_GPU_PLATFORM_NAME}" \
+    --arg pod_template "${OSMO_G6E_GPU_POD_TEMPLATE_NAME}" \
+    'del(.last_heartbeat, .parsed_resource_validations, .parsed_pod_template, .parsed_group_templates) |
+     .download_type = "download" |
+     .common_pod_template = ((.common_pod_template // ["default_ctrl", "default_user"]) | map(select(startswith("fsx_lustre") | not))) |
+     .platforms.default.default_mounts = ((.platforms.default.default_mounts // []) | map(select(. != "/mnt/osmo-fsx"))) |
+     .platforms[$platform] = {
+       description: "AWS G6e L40S platform",
+       host_network_allowed: false,
+       privileged_allowed: false,
+       allowed_mounts: [],
+       default_mounts: [],
+       default_variables: {},
+       resource_validations: [],
+       override_pod_template: [$pod_template]
+     }' >"${POOL_CONFIG}"
+
+  if ! osmo_config_update /tmp/osmo-g6e-pool-config.log POOL default \
+    --file "${POOL_CONFIG}" \
+    --description "Configure AWS G6e GPU platform"; then
+    cat /tmp/osmo-g6e-pool-config.log >&2
+    die "failed to configure OSMO pool G6e platform"
+  fi
+fi
+
+if [[ "${OSMO_CONFIGURE_EFA_PLATFORMS}" == "true" ]]; then
+  POD_TEMPLATE_CURRENT="$(osmo config show POD_TEMPLATE 2>/dev/null || printf '{}')"
+  printf '%s' "${POD_TEMPLATE_CURRENT}" | jq \
+    --arg g7e_name "${OSMO_G7E_EFA_POD_TEMPLATE_NAME}" \
+    --arg g7e_label_value "${OSMO_G7E_EFA_PLATFORM_LABEL_VALUE}" \
+    --arg g6e_name "${OSMO_G6E_EFA_POD_TEMPLATE_NAME}" \
+    --arg g6e_label_value "${OSMO_G6E_EFA_PLATFORM_LABEL_VALUE}" \
+    --arg label_key "${OSMO_GPU_PLATFORM_LABEL_KEY}" \
+    --arg do_not_disrupt "${OSMO_GPU_POD_DO_NOT_DISRUPT}" \
+    --arg shm_size "${OSMO_GPU_POD_SHM_SIZE}" \
+    --arg efa_resource_name "${OSMO_EFA_RESOURCE_NAME}" \
+    --arg efa_resource_count "${OSMO_EFA_RESOURCE_COUNT}" \
+    'def efa_template($label_value): {
+       metadata: {
+         annotations: {
+           "karpenter.sh/do-not-disrupt": $do_not_disrupt
+         }
+       },
+       spec: {
+         nodeSelector: {
+           ($label_key): $label_value
+         },
+         tolerations: [
+           {
+             key: "nvidia.com/gpu",
+             operator: "Exists",
+             effect: "NoSchedule"
+           },
+           {
+             key: $efa_resource_name,
+             operator: "Exists",
+             effect: "NoSchedule"
+           }
+         ],
+         affinity: {
+           podAntiAffinity: {
+             requiredDuringSchedulingIgnoredDuringExecution: [
+               {
+                 labelSelector: {
+                   matchLabels: {
+                     "osmo.workflow_id": "{{WF_ID}}"
+                   }
+                 },
+                 topologyKey: "kubernetes.io/hostname"
+               }
+             ]
+           }
+         },
+         containers: [
+           {
+             name: "{{USER_CONTAINER_NAME}}",
+             resources: {
+               requests: {
+                 ($efa_resource_name): $efa_resource_count
+               },
+               limits: {
+                 ($efa_resource_name): $efa_resource_count
+               }
+             },
+             volumeMounts: [
+               {
+                 name: "shm",
+                 mountPath: "/dev/shm"
+               }
+             ]
+           }
+         ],
+         volumes: [
+           {
+             name: "shm",
+             emptyDir: {
+               medium: "Memory",
+               sizeLimit: $shm_size
+             }
+           }
+         ]
+       }
+     };
+     .[$g7e_name] = efa_template($g7e_label_value) |
+     .[$g6e_name] = efa_template($g6e_label_value)' >"${GPU_POD_TEMPLATE_CONFIG}"
+
+  if ! osmo_config_update /tmp/osmo-efa-pod-template.log POD_TEMPLATE \
+    --file "${GPU_POD_TEMPLATE_CONFIG}" \
+    --description "Configure AWS EFA pod templates"; then
+    cat /tmp/osmo-efa-pod-template.log >&2
+    die "failed to configure OSMO EFA pod templates"
+  fi
+
+  if ! POOL_CURRENT="$(osmo config show POOL default 2>/tmp/osmo-pool-show.log)"; then
+    cat /tmp/osmo-pool-show.log >&2
+    log "OSMO pool config is unreadable; applying AWS reference pool baseline"
+    POOL_CURRENT="$(aws_reference_pool_baseline)"
+  fi
+
+  printf '%s' "${POOL_CURRENT}" | jq \
+    --arg g7e_platform "${OSMO_G7E_EFA_PLATFORM_NAME}" \
+    --arg g7e_pod_template "${OSMO_G7E_EFA_POD_TEMPLATE_NAME}" \
+    --arg g6e_platform "${OSMO_G6E_EFA_PLATFORM_NAME}" \
+    --arg g6e_pod_template "${OSMO_G6E_EFA_POD_TEMPLATE_NAME}" \
+    'def efa_platform($description; $pod_template): {
+       description: $description,
+       host_network_allowed: false,
+       privileged_allowed: false,
+       allowed_mounts: [],
+       default_mounts: [],
+       default_variables: {},
+       resource_validations: [],
+       override_pod_template: [$pod_template]
+     };
+     del(.last_heartbeat, .parsed_resource_validations, .parsed_pod_template, .parsed_group_templates) |
+     .download_type = "download" |
+     .common_pod_template = ((.common_pod_template // ["default_ctrl", "default_user"]) | map(select(startswith("fsx_lustre") | not))) |
+     .platforms.default.default_mounts = ((.platforms.default.default_mounts // []) | map(select(. != "/mnt/osmo-fsx"))) |
+     .platforms[$g7e_platform] = efa_platform("AWS G7e RTX PRO 6000 Blackwell EFA platform"; $g7e_pod_template) |
+     .platforms[$g6e_platform] = efa_platform("AWS G6e L40S EFA platform"; $g6e_pod_template)' >"${POOL_CONFIG}"
+
+  if ! osmo_config_update /tmp/osmo-efa-pool-config.log POOL default \
+    --file "${POOL_CONFIG}" \
+    --description "Configure AWS EFA platforms"; then
+    cat /tmp/osmo-efa-pool-config.log >&2
+    die "failed to configure OSMO pool EFA platforms"
   fi
 fi
 
