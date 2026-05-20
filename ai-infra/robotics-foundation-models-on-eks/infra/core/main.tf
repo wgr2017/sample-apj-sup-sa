@@ -184,12 +184,6 @@ module "karpenter" {
 
   iam_policy_statements = [
     {
-      sid       = "AllowDescribeInstanceStatus"
-      actions   = ["ec2:DescribeInstanceStatus"]
-      resources = ["*"]
-    },
-    {
-      sid       = "AllowListInstanceProfiles"
       actions   = ["iam:ListInstanceProfiles"]
       resources = ["*"]
     }

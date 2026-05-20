@@ -11,6 +11,7 @@ KARPENTER_NODEPOOL_NAME="${KARPENTER_NODEPOOL_NAME:-$(version_value karpenter_no
 GPU_OPERATOR_NAMESPACE="${GPU_OPERATOR_NAMESPACE:-$(version_value gpu_operator_namespace)}"
 GPU_CLEANUP_DELETE_PREWARM="${GPU_CLEANUP_DELETE_PREWARM:-true}"
 GPU_CLEANUP_DELETE_COMPLETED_VALIDATORS="${GPU_CLEANUP_DELETE_COMPLETED_VALIDATORS:-true}"
+GPU_CLEANUP_DELETE_EMPTY_NODECLAIMS="${GPU_CLEANUP_DELETE_EMPTY_NODECLAIMS:-true}"
 GPU_CLEANUP_PREWARM_POD_NAME="${GPU_CLEANUP_PREWARM_POD_NAME:-aws-osmo-gpu-prewarm}"
 GPU_CLEANUP_TIMEOUT_SECONDS="${GPU_CLEANUP_TIMEOUT_SECONDS:-1800}"
 GPU_CLEANUP_POLL_SECONDS="${GPU_CLEANUP_POLL_SECONDS:-15}"
@@ -30,6 +31,35 @@ if [[ "${GPU_CLEANUP_DELETE_COMPLETED_VALIDATORS}" == "true" ]]; then
     --ignore-not-found >/dev/null
 fi
 
+node_has_blocking_pods() {
+  local node_name="$1"
+  kubectl get pods -A \
+    --field-selector "spec.nodeName=${node_name}" \
+    -o json | jq -e '
+      any(.items[];
+        (.status.phase != "Succeeded" and .status.phase != "Failed") and
+        (((.metadata.ownerReferences // []) | map(.kind) | index("DaemonSet")) == null) and
+        ((.metadata.annotations["kubernetes.io/config.mirror"] // "") == "")
+      )
+    ' >/dev/null
+}
+
+delete_empty_nodeclaims() {
+  kubectl get nodeclaim -l "karpenter.sh/nodepool=${KARPENTER_NODEPOOL_NAME}" -o json |
+    jq -r '.items[] | [.metadata.name, (.status.nodeName // ""), (.metadata.deletionTimestamp // "")] | @tsv' |
+    while IFS=$'\t' read -r nodeclaim_name node_name deletion_timestamp; do
+      [[ -n "${nodeclaim_name}" ]] || continue
+      [[ -z "${deletion_timestamp}" ]] || continue
+      if [[ -n "${node_name}" ]] && node_has_blocking_pods "${node_name}"; then
+        log "waiting for GPU workload pods to leave ${node_name}"
+        continue
+      fi
+
+      log "deleting empty GPU NodeClaim ${nodeclaim_name}"
+      kubectl delete nodeclaim "${nodeclaim_name}" --wait=false >/dev/null || true
+    done
+}
+
 deadline="$(( $(date -u +%s) + GPU_CLEANUP_TIMEOUT_SECONDS ))"
 attempt=0
 
@@ -42,6 +72,10 @@ while [[ "$(date -u +%s)" -lt "${deadline}" ]]; do
   if [[ "${nodeclaim_count}" == "0" && "${node_count}" == "0" ]]; then
     log "Karpenter GPU nodes cleaned up"
     exit 0
+  fi
+
+  if [[ "${GPU_CLEANUP_DELETE_EMPTY_NODECLAIMS}" == "true" ]]; then
+    delete_empty_nodeclaims
   fi
 
   attempt="$((attempt + 1))"
