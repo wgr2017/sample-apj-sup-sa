@@ -54,11 +54,6 @@ class AnthropicClient:
             )
         return self._client
 
-    async def aclose(self) -> None:
-        if self._client is not None:
-            await self._client.aclose()
-            self._client = None
-
     async def messages(
         self,
         body: dict[str, Any],
