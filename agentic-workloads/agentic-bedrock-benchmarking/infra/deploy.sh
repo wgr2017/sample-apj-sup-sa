@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# sample-bedrock-model-benchmarking deploy script.
+# agentic-bedrock-benchmarking deploy script.
 #
 # Uses the AWS_PROFILE you set (default: 'default') for stack ops + ECR push.
 # The DEPLOYED app uses the runtime role (NOT this profile) for Bedrock calls.
@@ -9,11 +9,11 @@
 set -euo pipefail
 
 # -------- config --------
-APP_NAME="${APP_NAME:-sample-bedrock-model-benchmarking}"
+APP_NAME="${APP_NAME:-agentic-bedrock-benchmarking}"
 REGION="${REGION:-ap-south-1}"
 PROFILE="${AWS_PROFILE:-default}"
 STACK_NAME="${STACK_NAME:-${APP_NAME}}"
-TEMPLATE_PATH="$(cd "$(dirname "$0")" && pwd)/sample-bedrock-model-benchmarking.yaml"
+TEMPLATE_PATH="$(cd "$(dirname "$0")" && pwd)/agentic-bedrock-benchmarking.yaml"
 PROJECT_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 IMAGE_TAG="${IMAGE_TAG:-$(date +%Y%m%d-%H%M%S)}"
 

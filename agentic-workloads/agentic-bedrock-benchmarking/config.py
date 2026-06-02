@@ -65,7 +65,7 @@ def _load() -> AppConfig:
         allowlist = _list("MODEL_ALLOWLIST")  # empty = show all
         model_allowlist_patterns = tuple(allowlist)
         daily_invocation_limit = _int("DAILY_INVOCATION_LIMIT", 50)
-        quota_table_name = os.getenv("QUOTA_TABLE_NAME", "sample-bedrock-model-benchmarking-quota")
+        quota_table_name = os.getenv("QUOTA_TABLE_NAME", "agentic-bedrock-benchmarking-quota")
         cognito_user_pool_id = os.getenv("COGNITO_USER_POOL_ID")
         cognito_client_id = os.getenv("COGNITO_CLIENT_ID")
         cognito_region = os.getenv("COGNITO_REGION", locked_region)

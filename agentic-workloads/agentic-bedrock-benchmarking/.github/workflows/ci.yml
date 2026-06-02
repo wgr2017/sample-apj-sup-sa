@@ -32,7 +32,7 @@ jobs:
       - uses: actions/checkout@v4
 
       - name: Build Docker image
-        run: docker build --platform linux/amd64 -t bedrockbench:ci .
+        run: docker build --platform linux/amd64 -t agentic-bedrock-benchmarking:ci .
 
   cfn-lint:
     runs-on: ubuntu-latest
@@ -47,4 +47,4 @@ jobs:
         run: pip install cfn-lint
 
       - name: Lint CloudFormation template
-        run: cfn-lint infra/sample-bedrock-model-benchmarking.yaml
+        run: cfn-lint infra/agentic-bedrock-benchmarking.yaml

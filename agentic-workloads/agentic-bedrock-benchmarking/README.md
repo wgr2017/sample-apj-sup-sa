@@ -30,7 +30,7 @@ The app starts at `http://localhost:8501`. In development mode there is no login
 
 ## Deploying to AWS
 
-The CloudFormation stack at [infra/sample-bedrock-model-benchmarking.yaml](infra/sample-bedrock-model-benchmarking.yaml) provisions the full production stack in one command. The deploy script at [infra/deploy.sh](infra/deploy.sh) handles ECR image build/push and stack creation automatically.
+The CloudFormation stack at [infra/agentic-bedrock-benchmarking.yaml](infra/agentic-bedrock-benchmarking.yaml) provisions the full production stack in one command. The deploy script at [infra/deploy.sh](infra/deploy.sh) handles ECR image build/push and stack creation automatically.
 
 ### What gets deployed
 
@@ -55,12 +55,12 @@ The CloudFormation stack at [infra/sample-bedrock-model-benchmarking.yaml](infra
 ### Deploy
 
 ```bash
-# defaults: ap-south-1, app name "sample-bedrock-model-benchmarking", $200/month budget cap
+# defaults: ap-south-1, app name "agentic-bedrock-benchmarking", $200/month budget cap
 cd infra
 bash deploy.sh
 
 # override any setting via env vars
-APP_NAME=sample-bedrock-model-benchmarking \
+APP_NAME=agentic-bedrock-benchmarking \
 REGION=us-west-2 \
 AWS_PROFILE=my-deploy-profile \
 bash deploy.sh
@@ -81,7 +81,7 @@ All parameters have defaults. Override them with `--parameter-overrides` in the 
 
 | Parameter | Default | Description |
 |---|---|---|
-| `AppName` | `sample-bedrock-model-benchmarking` | Prefix for all resource names |
+| `AppName` | `agentic-bedrock-benchmarking` | Prefix for all resource names |
 | `Region` | `ap-south-1` | Deployment region |
 | `ImageTag` | `latest` | ECR image tag to run |
 | `AdminEmail` | — | Creates a Cognito admin user and receives budget alerts |
@@ -106,15 +106,15 @@ Push a new image and force a new ECS deployment:
 ```bash
 IMAGE_TAG=v2 bash infra/deploy.sh
 # then trigger a new deployment to pick up the image
-aws ecs update-service --cluster sample-bedrock-model-benchmarking --service sample-bedrock-model-benchmarking --force-new-deployment --region ap-south-1
+aws ecs update-service --cluster agentic-bedrock-benchmarking --service agentic-bedrock-benchmarking --force-new-deployment --region ap-south-1
 ```
 
 ### Tearing down
 
 ```bash
-aws cloudformation delete-stack --stack-name sample-bedrock-model-benchmarking --region ap-south-1
+aws cloudformation delete-stack --stack-name agentic-bedrock-benchmarking --region ap-south-1
 # ECR images are not deleted automatically — remove the repo manually if needed
-aws ecr delete-repository --repository-name sample-bedrock-model-benchmarking --force --region ap-south-1
+aws ecr delete-repository --repository-name agentic-bedrock-benchmarking --force --region ap-south-1
 ```
 
 ## Environment variables
@@ -127,7 +127,7 @@ These are injected automatically by the CloudFormation stack. Set them manually 
 | `MAX_TOKENS_CAP` | `2048` | Upper bound on the max_tokens slider |
 | `RUNS_PER_MODEL_CAP` | `3` | Max parallel runs per model |
 | `DAILY_INVOCATION_LIMIT` | `50` | Per-user daily Bedrock call limit (0 = unlimited) |
-| `QUOTA_TABLE_NAME` | `sample-bedrock-model-benchmarking-quota` | DynamoDB table for quota tracking |
+| `QUOTA_TABLE_NAME` | `agentic-bedrock-benchmarking-quota` | DynamoDB table for quota tracking |
 | `COGNITO_USER_POOL_ID` | — | Cognito user pool for login |
 | `COGNITO_CLIENT_ID` | — | Cognito app client ID |
 | `COGNITO_REGION` | `ap-south-1` | Region of the Cognito user pool |
