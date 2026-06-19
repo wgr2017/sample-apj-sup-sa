@@ -1,3 +1,12 @@
+<p align="center">
+  <a href="https://www.loom.com/share/cdc5a2bee4cd432fb391791ec5ffaeed">
+    <img
+      src="https://cdn.loom.com/sessions/thumbnails/cdc5a2bee4cd432fb391791ec5ffaeed-739f1516028621f5-full-play.gif#t=0.1"
+      alt="Voice demo: fixing API Gateway and Lambda failures"
+      width="780">
+  </a>
+</p>
+
 # Voice pair debugger for AWS
 
 `Voice` is a voice-driven AI agent that helps developers debug AWS applications through conversation.

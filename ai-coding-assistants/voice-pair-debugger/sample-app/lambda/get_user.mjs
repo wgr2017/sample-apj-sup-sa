@@ -30,11 +30,11 @@ export const handler = async (event) => {
       statusCode: 200,
       body: JSON.stringify({ user: response.Item })
     };
-  } catch (e) {
-    console.log(`ERROR: ${e}`);
+  } catch (error) {
+    console.error(`ERROR: ${error}`);
     return {
       statusCode: 500,
-      body: JSON.stringify({ error: e.message })
+      body: JSON.stringify({ error: error.message })
     };
   }
 };

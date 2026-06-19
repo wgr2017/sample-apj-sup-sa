@@ -1,18 +1,7 @@
-# Voice: voice pair debugger
+# Voice pair debugger for AWS — Architecture
 
 A voice-driven AI agent that helps developers debug AWS applications through
-Socratic conversation. Built with Pipecat, Deepgram, and Amazon Bedrock.
-
-## Name candidates
-
-| Name  | Rationale                                      |
-|-------|------------------------------------------------|
-| Voice   | Voice. Short CLI command. Memorable.           |
-| Hunch | What a debugger forms. `hunch listen`.         |
-| Rubi  | Rubber duck debugging, but alive.              |
-| Pulse | Monitoring/diagnostics feel. `pulse`.          |
-
-Working name: **Voice**.
+conversation. Built with Pipecat, Deepgram, and Amazon Bedrock.
 
 ## How it works
 
@@ -24,7 +13,7 @@ sequenceDiagram
     participant LLM as Bedrock (Claude)
     participant AWS as AWS APIs (boto3)
 
-    Dev->>Voice: runs `voice`
+    Dev->>Voice: runs `uv run bot.py`
     Voice->>Dev: "Hey, I'm Voice, your debugging partner..." (audio)
     Dev->>Voice: describes problem (voice)
     Voice->>DG: audio stream
@@ -47,15 +36,15 @@ sequenceDiagram
 
 ```mermaid
 graph TD
-    subgraph Terminal
-        MIC[Microphone] --> LOCAL[Local Audio Transport]
+    subgraph Browser tab (WebRTC)
+        MIC[Microphone] --> LOCAL[SmallWebRTC transport]
         LOCAL --> SPK[Speaker]
     end
 
     subgraph Pipecat Pipeline
         LOCAL --> STT[Deepgram Nova-3 STT]
         STT --> CTX[Context Manager]
-        CTX --> LLM[Bedrock Claude / Nova Pro]
+        CTX --> LLM[Bedrock Claude]
         LLM --> TTS[Deepgram Aura-2 TTS]
         TTS --> LOCAL
         LLM -->|function calls| TOOLS[Tool Layer]
@@ -67,6 +56,7 @@ graph TD
         TOOLS --> XR[X-Ray Traces]
         TOOLS --> LAM[Lambda Describe]
         TOOLS --> FILES[Local Files]
+        TOOLS --> DISP[Terminal: fix snippet]
     end
 
     subgraph Credentials
@@ -152,6 +142,7 @@ graph LR
         B --> J[tools/display.py]
         A --> G[config.py]
         B --> I[prompt.md]
+        B --> K[greeting.md]
     end
 ```
 
@@ -160,9 +151,10 @@ graph LR
 | File                    | Purpose                                          |
 |-------------------------|--------------------------------------------------|
 | `bot.py`                | Entry point: builds the transport and starts the runner |
-| `pipeline.py`           | Pipecat pipeline assembly, loads the system prompt |
+| `pipeline.py`           | Pipecat pipeline assembly; loads the prompt and greeting |
 | `config.py`              | Settings (region, profile, model, voice)          |
 | `prompt.md`             | System prompt for the debugging persona          |
+| `greeting.md`           | The spoken opening line                          |
 | `tools/__init__.py`     | Tool registry and schema builder                 |
 | `tools/cloudwatch.py`   | query_cloudwatch_logs                            |
 | `tools/xray.py`         | get_xray_trace_summaries                         |
@@ -174,7 +166,7 @@ graph LR
 
 ```mermaid
 stateDiagram-v2
-    [*] --> Listening: voice starts
+    [*] --> Listening: Voice starts
     Listening --> Thinking: developer describes problem
     Thinking --> Fetching: LLM calls a tool
     Fetching --> Thinking: tool result returned
@@ -204,7 +196,7 @@ turn detection and barge-in natively.
 
 1. A bug exists: a Lambda function reads from DynamoDB but uses the wrong
    key attribute name. It returns 500 on the `/users` endpoint.
-2. Developer runs `voice`.
+2. Developer runs `uv run bot.py`.
 3. Voice: "Hey, I'm Voice, your debugging partner. What are you running into?"
 4. Developer: "My /users API is returning 500 errors."
 5. Voice fetches CloudWatch logs for the API Gateway + Lambda.
@@ -213,7 +205,7 @@ turn detection and barge-in natively.
    that attribute?"
 7. Developer: "Oh, I refactored the model yesterday."
 8. Voice: "That's the issue. In `get_users.mjs`, change `item.userId` to
-   `item.user_id`." (spoken; the transcript also appears in the browser UI)
+   `item.user_id`." (spoken; the snippet is printed to the terminal)
 9. Done in under 90 seconds. Fully voice-driven.
 
 ## Planted bugs

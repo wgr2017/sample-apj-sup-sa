@@ -1,4 +1,4 @@
-# Planted bugs
+# Voice pair debugger for AWS — Planted bugs
 
 The demo stack in `sample-app/` ships with deliberate bugs for `Voice` to diagnose. The source is intentionally free of "this is the bug" comments so the bugs are realistic to find. Each one surfaces through a different tool and has its root cause in a different place, so the set exercises the full diagnostic loop rather than a single signal.
 
