@@ -1,9 +1,9 @@
-# Voice: voice pair debugger for AWS
+# Voice pair debugger for AWS
 
 `Voice` is a voice-driven AI agent that helps developers debug AWS applications through conversation.
 You run it, open a browser tab, and talk to it. `Voice` listens, reasons with a model on Amazon Bedrock, inspects your live AWS resources and local source, then narrates the root cause and prints a suggested code snippet to your terminal.
 
-It is built with [Pipecat](https://github.com/pipecat-ai/pipecat) for the real-time voice pipeline, Deepgram for speech-to-text and text-to-speech, and Amazon Bedrock (Claude) for reasoning and tool use.
+It is built with [Pipecat](https://github.com/pipecat-ai/pipecat) for the real-time voice pipeline, [Deepgram](https://deepgram.com) for speech-to-text and text-to-speech, and [Amazon Bedrock](https://aws.amazon.com/bedrock/) (Claude) for reasoning and tool use.
 
 `Voice` is read-only by design. It diagnoses and suggests; it never modifies your files or your AWS resources.
 
@@ -18,6 +18,7 @@ graph LR
     TTS --> SPK[Speaker]
     LLM -->|function calls| TOOLS[Tools - read-only]
     TOOLS -->|results| LLM
+    LLM -->|show_code_suggestion| TERM[Terminal: fix snippet]
 ```
 
 The model has six tools available:
