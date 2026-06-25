@@ -1,6 +1,6 @@
 # AWS Security Analyzer Power
 
-A Kiro Power that performs comprehensive multi-region AWS security assessments using the [Well-Architected Security MCP Server](https://github.com/awslabs/well-architected-security-mcp-server). It scans all 33+ AWS regions, evaluates security posture, and generates detailed markdown reports with findings, compliance status, encryption audits, and prioritized remediation plans.
+A Kiro Power that performs comprehensive multi-region AWS security assessments using the [Well-Architected Security MCP Server](https://github.com/awslabs/mcp/tree/main/src/well-architected-security-mcp-server/awslabs/well_architected_security_mcp_server). It scans all 33+ AWS regions, evaluates security posture, and generates detailed markdown reports with findings, compliance status, encryption audits, and prioritized remediation plans.
 
 ## What It Does
 
